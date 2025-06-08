@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>WebXR Saturn</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+		<style>
+			body {
+				margin: 0;
+				font-family: sans-serif;
+			}
+			#info {
+				position: absolute;
+				top: 10px;
+				width: 100%;
+				text-align: center;
+				color: white;
+				z-index: 100;
+				display:block;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="info">Наведіть телефон на поверхню та торкніться екрана, щоб розмістити Сатурн</div>
+
+		<script type="module">
+			// Імпортуємо все необхідне з бібліотеки Three.js
+			import * as THREE from 'https://unpkg.com/three@0.139.2/build/three.module.js';
+			import { ARButton } from 'https://unpkg.com/three@0.139.2/examples/jsm/webxr/ARButton.js';
+
+			let camera, scene, renderer;
+			let controller;
+			let saturnSystem; // Це буде наша група з Сатурном і кільцями
+
+			init();
+			animate();
+
+			function init() {
+				// Створюємо сцену
+				scene = new THREE.Scene();
+
+				// Створюємо камеру
+				camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+				// Створюємо рендерер (те, що малює)
+				renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+				renderer.setPixelRatio(window.devicePixelRatio);
+				renderer.setSize(window.innerWidth, window.innerHeight);
+				// Включаємо підтримку WebXR
+				renderer.xr.enabled = true;
+				document.body.appendChild(renderer.domElement);
+				
+				// Додаємо кнопку ARButton
+				document.body.appendChild(ARButton.createButton(renderer));
+
+				// Додаємо світло
+				const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+				light.position.set(0.5, 1, 0.25);
+				scene.add(light);
+
+				// --- Створюємо нашу модель Сатурна (майже такий самий код, як у VR) ---
+				const textureLoader = new THREE.TextureLoader();
+
+				// Масштабуємо все, щоб було зручно дивитись в AR (набагато менше)
+				const scaleFactor = 0.1; // 1 = 1 метр. Зробимо Сатурн 10см в діаметрі
+				
+				// Сатурн
+				const saturnRadius = 0.6 * scaleFactor;
+				const saturnGeometry = new THREE.SphereGeometry(saturnRadius, 32, 16);
+				const saturnMaterial = new THREE.MeshStandardMaterial({ map: textureLoader.load('assets/saturn.jpg') });
+				const saturn = new THREE.Mesh(saturnGeometry, saturnMaterial);
+
+				// Кільця
+				const ringInnerRadius = 0.745 * scaleFactor;
+				const ringOuterRadius = 1.37 * scaleFactor;
+				const ringGeometry = new THREE.RingGeometry(ringInnerRadius, ringOuterRadius, 64);
+				const ringMaterial = new THREE.MeshBasicMaterial({
+					map: textureLoader.load('assets/saturn_ring.png'),
+					side: THREE.DoubleSide,
+					transparent: true
+				});
+				const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+				ring.rotation.x = Math.PI / 2;
+
+				// Групуємо Сатурн і кільця
+				saturnSystem = new THREE.Group();
+				saturnSystem.add(saturn);
+				saturnSystem.add(ring);
+				// Нахил осі 27 градусів
+				saturnSystem.rotation.z = -27 * (Math.PI / 180);
+				
+				// Поки що ховаємо модель, поки користувач не торкнеться екрана
+				saturnSystem.visible = false;
+				scene.add(saturnSystem);
+
+				// --- Логіка для розміщення об'єкта по тапу на екран ---
+				function onSelect() {
+					// Якщо модель вже видима, нічого не робимо
+					if (saturnSystem && saturnSystem.visible) return;
+
+					// Робимо модель видимою і ставимо перед камерою на відстані 0.5 метра
+					saturnSystem.position.set(0, 0, -0.5).applyMatrix4(controller.matrixWorld);
+					saturnSystem.quaternion.setFromRotationMatrix(controller.matrixWorld);
+					saturnSystem.visible = true;
+				}
+
+				controller = renderer.xr.getController(0);
+				controller.addEventListener('select', onSelect);
+				scene.add(controller);
+
+				// Обробка зміни розміру вікна
+				window.addEventListener('resize', onWindowResize, false);
+			}
+
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize(window.innerWidth, window.innerHeight);
+			}
+
+			// Функція анімації
+			function animate() {
+				// Замість requestAnimationFrame використовуємо setAnimationLoop для WebXR
+				renderer.setAnimationLoop(animate);
+
+				// Якщо Сатурн видимий, обертаємо його
+				if (saturnSystem && saturnSystem.visible) {
+					saturnSystem.rotation.y += 0.01;
+				}
+
+				renderer.render(scene, camera);
+			}
+		</script>
+	</body>
+</html>
